@@ -3,7 +3,7 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, X } from "lucide-react";
-import { approveWorkerAndAssignWallets } from "@/actions/admin-approval-actions";
+import { approveWorkerAndAssignWallets, updateAdminAccountCredentials } from "@/actions/admin-approval-actions";
 import { creditTokensToWorker } from "@/actions/admin-token-actions";
 import { approveDepositAndCredit, rejectDeposit } from "@/actions/deposit-review-actions";
 import { WorkerInspector } from "@/components/admin/WorkerInspector";
@@ -120,11 +120,13 @@ export function OperationsDesk({
   profiles,
   deposits,
   loadError,
+  adminEmail,
 }: {
   applications: PendingApplication[];
   profiles: WorkerProfileRow[];
   deposits: PendingDeposit[];
   loadError?: string;
+  adminEmail: string;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(applications);
@@ -153,6 +155,7 @@ export function OperationsDesk({
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [inspectingId, setInspectingId] = useState<string | null>(null);
   const [tab, setTab] = useState<"pending" | "deposits" | "workers">("pending");
+  const [securityOpen, setSecurityOpen] = useState(false);
 
   useEffect(() => {
     setPending(applications);
@@ -193,16 +196,25 @@ export function OperationsDesk({
   return (
     <div className="min-h-screen bg-white text-gray-900">
       <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Records</h1>
-        <p className="mt-2 max-w-2xl text-sm text-gray-600">
-          Approve applicants, assign payout wallets, and credit tokens after a deposit.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Records</h1>
+            <p className="mt-2 max-w-2xl text-sm text-gray-600">
+              Approve applicants, assign payout wallets, and credit tokens after a deposit.
+            </p>
+          </div>
+          <button type="button" className={secondaryButtonClass} onClick={() => setSecurityOpen(true)}>
+            Admin settings
+          </button>
+        </div>
 
         {loadError ? (
           <p className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900">
             {loadError}
           </p>
         ) : null}
+        {securityOpen ? <AdminSecurityDialog email={adminEmail} onClose={() => setSecurityOpen(false)} /> : null}
+
         {creditNotice ? (
           <p className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900">
             {creditNotice}
@@ -734,5 +746,94 @@ export function OperationsDesk({
         </Dialog>
       ) : null}
     </div>
+  );
+}
+
+function AdminSecurityDialog({ email, onClose }: { email: string; onClose: () => void }) {
+  const [accountEmail, setAccountEmail] = useState(email);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [nextEmail, setNextEmail] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [emailMessage, setEmailMessage] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  return (
+    <Dialog title="Admin settings" description="Security" onClose={onClose}>
+      <div className="space-y-6">
+        <p className="text-sm text-gray-600">
+          Current account <span className="font-medium text-gray-900">{accountEmail}</span>
+        </p>
+        <form
+          className="space-y-3"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            setPasswordMessage(null);
+            setPasswordError(null);
+            if (password !== confirmPassword) {
+              setPasswordError("Passwords do not match.");
+              return;
+            }
+            setSavingPassword(true);
+            const result = await updateAdminAccountCredentials(password);
+            setSavingPassword(false);
+            if (!result.success) {
+              setPasswordError(result.error);
+              return;
+            }
+            setPassword("");
+            setConfirmPassword("");
+            setPasswordMessage(result.message);
+          }}
+        >
+          <h3 className="text-sm font-semibold text-gray-900">Update password</h3>
+          <label className="block text-sm font-medium text-gray-900">
+            New Password
+            <input className={fieldClass} type="password" autoComplete="new-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
+          </label>
+          <label className="block text-sm font-medium text-gray-900">
+            Confirm New Password
+            <input className={fieldClass} type="password" autoComplete="new-password" required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
+          </label>
+          {passwordError ? <p className="text-sm text-red-700" role="alert">{passwordError}</p> : null}
+          {passwordMessage ? <p className="text-sm text-gray-900" role="status">{passwordMessage}</p> : null}
+          <button type="submit" className={primaryButtonClass} disabled={savingPassword}>
+            {savingPassword ? "Updating…" : "Update Password"}
+          </button>
+        </form>
+        <form
+          className="space-y-3 border-t border-gray-200 pt-6"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            setEmailMessage(null);
+            setEmailError(null);
+            setSavingEmail(true);
+            const result = await updateAdminAccountCredentials(undefined, nextEmail);
+            setSavingEmail(false);
+            if (!result.success) {
+              setEmailError(result.error);
+              return;
+            }
+            setAccountEmail(nextEmail.trim());
+            setNextEmail("");
+            setEmailMessage(result.message);
+          }}
+        >
+          <h3 className="text-sm font-semibold text-gray-900">Update email</h3>
+          <label className="block text-sm font-medium text-gray-900">
+            New Admin Email
+            <input className={fieldClass} type="email" autoComplete="email" required value={nextEmail} onChange={(event) => setNextEmail(event.target.value)} />
+          </label>
+          {emailError ? <p className="text-sm text-red-700" role="alert">{emailError}</p> : null}
+          {emailMessage ? <p className="text-sm text-gray-900" role="status">{emailMessage}</p> : null}
+          <button type="submit" className={primaryButtonClass} disabled={savingEmail}>
+            {savingEmail ? "Updating…" : "Update Email"}
+          </button>
+        </form>
+      </div>
+    </Dialog>
   );
 }

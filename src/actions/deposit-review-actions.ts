@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { verifyAdmin } from "@/lib/supabase/admin";
 import type { InspectorApplication, InspectorDeposit, WorkerInspectorData } from "@/lib/admin/types";
 
 type DepositClaim = {
@@ -36,23 +35,15 @@ type DepositHistoryRow = {
 type ApplicationHistoryRow = {
   id: string;
   status: string;
-  tokens_spent: number | null;
+  tokens_staked?: number | null;
+  tokens_spent?: number | null;
   created_at: string;
   jobs: { title: string | null; tier: number | null } | { title: string | null; tier: number | null }[] | null;
 };
 
 async function requireAdmin() {
-  const session = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await session.auth.getUser();
-  if (!user) throw new Error("Unauthorized.");
-
-  const admin = createAdminClient();
-  const { data, error } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (error) throw new Error(error.message);
-  if (data?.role !== "admin") throw new Error("Unauthorized.");
-  return admin;
+  const { supabase } = await verifyAdmin();
+  return supabase;
 }
 
 function refresh() {
@@ -176,8 +167,8 @@ export async function loadWorkerInspector(userId: string): Promise<WorkerInspect
       .returns<DepositHistoryRow[]>(),
     admin
       .from("job_applications")
-      .select("id, status, tokens_spent, created_at, jobs(title, tier)")
-      .eq("user_id", id)
+      .select("id, status, tokens_staked, created_at, jobs(title, tier)")
+      .eq("worker_id", id)
       .order("created_at", { ascending: false })
       .returns<ApplicationHistoryRow[]>(),
   ]);
@@ -185,7 +176,25 @@ export async function loadWorkerInspector(userId: string): Promise<WorkerInspect
   if (profileResult.error) throw new Error(profileResult.error.message);
   if (!profileResult.data) throw new Error("Worker profile was not found.");
   if (depositResult.error) throw new Error(depositResult.error.message);
-  if (applicationResult.error) throw new Error(applicationResult.error.message);
+  let applicationRows = applicationResult.data;
+  if (applicationResult.error) {
+    const byUser = await admin
+      .from("job_applications")
+      .select("id, status, tokens_staked, created_at, jobs(title, tier)")
+      .eq("user_id", id)
+      .order("created_at", { ascending: false })
+      .returns<ApplicationHistoryRow[]>();
+    const legacyApps = byUser.error
+      ? await admin
+          .from("job_applications")
+          .select("id, status, tokens_spent, created_at, jobs(title, tier)")
+          .eq("worker_id", id)
+          .order("created_at", { ascending: false })
+          .returns<ApplicationHistoryRow[]>()
+      : byUser;
+    if (legacyApps.error) throw new Error(applicationResult.error.message);
+    applicationRows = legacyApps.data;
+  }
 
   const profile = profileResult.data;
   const deposits: InspectorDeposit[] = (depositResult.data ?? []).map((row) => ({
@@ -198,13 +207,13 @@ export async function loadWorkerInspector(userId: string): Promise<WorkerInspect
     createdAt: row.created_at,
   }));
 
-  const applications: InspectorApplication[] = (applicationResult.data ?? []).map((row) => {
+  const applications: InspectorApplication[] = (applicationRows ?? []).map((row) => {
     const job = Array.isArray(row.jobs) ? row.jobs[0] : row.jobs;
     return {
       id: row.id,
       jobTitle: job?.title || "Job",
       tier: job?.tier ?? null,
-      tokensSpent: row.tokens_spent ?? 0,
+      tokensSpent: row.tokens_staked ?? row.tokens_spent ?? 0,
       status: row.status,
       appliedAt: row.created_at,
     };

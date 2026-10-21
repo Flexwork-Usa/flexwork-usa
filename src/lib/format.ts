@@ -10,8 +10,11 @@ export const WORKER = {
 export const TOKEN_PRICE = 0.2;
 
 export const TOKEN_PACKS = [
-  { tokens: 50, price: 10 },
   { tokens: 100, price: 20 },
+  { tokens: 250, price: 50 },
+  { tokens: 500, price: 100 },
+  { tokens: 2500, price: 500 },
+  { tokens: 5000, price: 1000 },
 ] as const;
 
 export const TIER_META: Record<

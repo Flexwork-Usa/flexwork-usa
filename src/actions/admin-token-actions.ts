@@ -1,6 +1,6 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { verifyAdmin } from "@/lib/supabase/admin";
 import { TOKEN_PRICE } from "@/lib/format";
 
 export type CreditTokensInput = {
@@ -42,7 +42,7 @@ export async function creditTokensToWorker({
     throw new Error("Token credit must be a positive whole number.");
   }
 
-  const supabase = createAdminClient();
+  const { supabase } = await verifyAdmin();
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")

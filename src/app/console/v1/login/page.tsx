@@ -1,84 +1,113 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { AuthPage, authButtonClass, authFieldClass } from "@/components/auth/AuthPage";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
-import { fieldClass, primaryButtonClass } from "@/lib/format";
+import { goTo } from "@/lib/auth/session";
 
 export default function ConsoleLoginPage() {
-  const router = useRouter();
-  const [identifier, setIdentifier] = useState("");
-  const [key, setKey] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-white px-4 text-gray-900">
+    <AuthPage
+      title="Operations sign in"
+      subtitle="Use your admin email and password to open the operations console."
+      panelTitle="Admin operations console"
+      panelBody="Review deposits, payouts, workers, and onboarding from a dedicated workspace."
+      badge="Operations access"
+      highlights={[
+        "Review deposits, payouts, and worker applications",
+        "Approve onboarding and manage worker admins",
+        "Keep operations records in one console",
+      ]}
+      footer={
+        <>
+          Workers sign in at{" "}
+          <a href="/login" className="font-medium text-[#C85A17] hover:text-[#A84810]">
+            member login
+          </a>
+        </>
+      }
+    >
       <form
-        className="w-full max-w-sm space-y-3"
+        className="space-y-4"
         onSubmit={async (event) => {
           event.preventDefault();
           setSubmitting(true);
           setError(null);
-
           try {
             const supabase = createBrowserSupabaseClient();
             const { data, error: signInError } = await supabase.auth.signInWithPassword({
-              email: identifier.trim(),
-              password: key,
+              email: email.trim(),
+              password,
             });
 
             if (signInError || !data.user) {
-              setError("Unable to authenticate.");
+              setError("Could not sign in. Check your email and password.");
               return;
             }
 
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("role, is_approved")
+            const { data: adminUser } = await supabase
+              .from("admin_users")
+              .select("role")
               .eq("id", data.user.id)
               .maybeSingle();
 
-            if (profile?.role !== "admin" || !profile.is_approved) {
+            if (!adminUser) {
               await supabase.auth.signOut();
-              router.push("/");
-              router.refresh();
+              setError("This account does not have operations access.");
               return;
             }
 
-            router.push("/console/v1/x9q7");
-            router.refresh();
+            if (adminUser.role === "worker_admin") {
+              goTo("/worker-admin/dashboard");
+              return;
+            }
+
+            goTo("/console/v1/x9q7");
           } catch {
-            setError("Unable to authenticate.");
+            setError("Could not sign in.");
           } finally {
             setSubmitting(false);
           }
         }}
       >
-        <input
-          aria-label="Identifier"
-          placeholder="Identifier"
-          autoComplete="username"
-          required
-          className={fieldClass}
-          value={identifier}
-          onChange={(event) => setIdentifier(event.target.value)}
-        />
-        <input
-          aria-label="Key"
-          placeholder="Key"
-          type="password"
-          autoComplete="current-password"
-          required
-          className={fieldClass}
-          value={key}
-          onChange={(event) => setKey(event.target.value)}
-        />
-        {error ? <p className="text-sm text-gray-600">{error}</p> : null}
-        <button type="submit" className={`${primaryButtonClass} w-full`} disabled={submitting}>
-          {submitting ? "Authenticate" : "Authenticate"}
+        <label className="block text-sm font-medium text-slate-900" htmlFor="console-email">
+          Email
+          <input
+            id="console-email"
+            type="email"
+            autoComplete="username"
+            required
+            className={authFieldClass}
+            value={email}
+            placeholder="admin@flexwork-usa.com"
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </label>
+        <label className="block text-sm font-medium text-slate-900" htmlFor="console-password">
+          Password
+          <input
+            id="console-password"
+            type="password"
+            autoComplete="current-password"
+            required
+            className={authFieldClass}
+            value={password}
+            placeholder="Enter your password"
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </label>
+        {error ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">{error}</p>
+        ) : null}
+        <button type="submit" className={authButtonClass} disabled={submitting}>
+          {submitting ? "Signing in…" : "Sign in"}
         </button>
       </form>
-    </div>
+    </AuthPage>
   );
 }

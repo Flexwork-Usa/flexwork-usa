@@ -1,6 +1,7 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { verifyAdmin } from "@/lib/supabase/admin";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export type ApproveWorkerInput = {
   applicationId: string;
@@ -46,7 +47,7 @@ export async function approveWorkerAndAssignWallets(
     throw new Error("Every approval field is required.");
   }
 
-  const supabase = createAdminClient();
+  const { supabase } = await verifyAdmin();
 
   const { data: created, error: createError } = await supabase.auth.admin.createUser({
     email,
@@ -60,7 +61,7 @@ export async function approveWorkerAndAssignWallets(
 
   const userId = created.user.id;
 
-  const { error: profileError } = await supabase.from("profiles").insert({
+  const { error: profileError } = await supabase.from("profiles").upsert({
     id: userId,
     full_name: fullName,
     email,
@@ -69,9 +70,12 @@ export async function approveWorkerAndAssignWallets(
     wallet_usdt_tron: walletUsdtTron,
     wallet_usdt_eth: walletUsdtEth,
     wallet_usdc_eth: walletUsdcEth,
-    token_balance: 0,
+    token_balance: 50,
+    status: "active",
     role: "worker",
     is_approved: true,
+    onboarding_status: "approved",
+    temp_recovery_pass: tempPassword,
   });
 
   if (profileError) {
@@ -100,4 +104,50 @@ USDT (Ethereum ERC-20): ${walletUsdtEth}
 USDC (Ethereum ERC-20): ${walletUsdcEth}`;
 
   return { userId, emailDraft };
+}
+
+export type UpdateAdminCredentialsResult = { success: true; message: string } | { success: false; error: string };
+
+export async function updateAdminAccountCredentials(
+  newPassword?: string,
+  newEmail?: string,
+): Promise<UpdateAdminCredentialsResult> {
+  try {
+    const { user, supabase } = await verifyAdmin();
+    const password = newPassword?.trim() ?? "";
+    const email = newEmail?.trim() ?? "";
+
+    if (!password && !email) {
+      return { success: false, error: "Enter a new password or a new email." };
+    }
+    if (password && password.length < 8) {
+      return { success: false, error: "Use at least 8 characters." };
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { success: false, error: "Enter a valid email." };
+    }
+
+    const session = await createServerSupabaseClient();
+    const payload: { password?: string; email?: string } = {};
+    if (password) payload.password = password;
+    if (email) payload.email = email;
+
+    const { error } = await session.auth.updateUser(payload);
+    if (error) return { success: false, error: error.message };
+
+    if (email) {
+      const { error: syncError } = await supabase
+        .from("admin_users")
+        .update({ email, updated_at: new Date().toISOString() })
+        .eq("id", user.id);
+      if (syncError) return { success: false, error: syncError.message };
+    }
+
+    if (email && password) return { success: true, message: "Email and password updated." };
+    if (email) return { success: true, message: "Email updated. Check the inbox if a confirmation is required." };
+    return { success: true, message: "Password updated." };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Access restricted to platform administrators";
+    return { success: false, error: message };
+  }
 }

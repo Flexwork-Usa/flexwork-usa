@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "flexwork admin",
+    "slug": "flexwork-admin",
+    "scheme": "flexwork-admin",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "android": {
+      "package": "com.flexwork.admin",
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      }
+    }
+  }
+}

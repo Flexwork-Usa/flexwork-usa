@@ -17,6 +17,7 @@ export const metadata: Metadata = {
   description: "A minimalist remote work marketplace for curated, affiliate, and third-party roles.",
   icons: {
     icon: [{ url: "/favicon.png", type: "image/png" }],
+    apple: [{ url: "/favicon.png", type: "image/png" }],
   },
 };
 

@@ -3,17 +3,18 @@
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ExternalLink, Search, X } from "lucide-react";
-import { applyToAffiliateJob, applyToCuratedJob } from "@/actions/job-actions";
+import { JobMarketplaceCard } from "@/components/jobs/JobMarketplaceCard";
 import { PlatformGuideModal, PlatformMark, TrustpilotBadge } from "@/components/jobs/PlatformGuideModal";
+import { CategoryNav } from "@/components/jobs/CategoryNav";
+import { matchesTaxonomy, subcategoryIdsForPlatform, subcategoryIdsForText, type TaxonomySelection } from "@/lib/jobs/categories";
 import { DIRECTORY, DIRECTORY_CATEGORIES, type ExternalPlatform } from "@/lib/jobs/directory";
 import { platformLogos } from "@/lib/jobs/platform-logos";
 import { pageFrame } from "@/lib/frame";
+import { goTo } from "@/lib/auth/session";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
-import type { MarketplaceJob } from "@/lib/jobs/types";
+import type { ApplicantProfile, MarketplaceJob } from "@/lib/jobs/types";
 
 const GATE_MESSAGE = "Log in or apply to join flexwork-usa to access platform-executed projects.";
-const TOKEN_NOTICE = "Requires 10 Tokens ($2.00 value) to submit application";
-const TOKEN_COST = 10;
 
 const FILTERS = [
   { id: "all", label: "All" },
@@ -46,16 +47,9 @@ const orangeButton =
 const quietButton =
   "inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50";
 
-const cardClass =
-  "flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md";
-
 function skillsFrom(summary: string) {
   const text = summary.toLowerCase();
   return SKILL_WORDS.filter((skill) => text.includes(skill));
-}
-
-function externalUrlFor(job: MarketplaceJob) {
-  return job.platformUrl && /^https?:\/\//i.test(job.platformUrl) ? job.platformUrl : null;
 }
 
 function filterFromParams(params: { get: (key: string) => string | null }): FilterId {
@@ -90,12 +84,14 @@ export function JobsBoard({
   appliedJobIds,
   signedIn: signedInInitially,
   tokenBalance: tokenBalanceInitially,
+  applicant,
   loadError,
 }: {
   jobs: MarketplaceJob[];
   appliedJobIds: string[];
   signedIn: boolean;
   tokenBalance: number;
+  applicant?: ApplicantProfile | null;
   loadError?: string;
 }) {
   const router = useRouter();
@@ -103,38 +99,46 @@ export function JobsBoard({
   const filter = filterFromParams(searchParams);
   const [query, setQuery] = useState("");
   const [applied, setApplied] = useState(() => new Set(appliedJobIds));
-  const [pendingId, setPendingId] = useState<string | null>(null);
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [signedIn, setSignedIn] = useState(signedInInitially);
   const [tokenBalance, setTokenBalance] = useState(tokenBalanceInitially);
   const [gateJob, setGateJob] = useState<MarketplaceJob | null>(null);
   const [guide, setGuide] = useState<{ platform: ExternalPlatform; site: boolean } | null>(null);
+  const [taxonomy, setTaxonomy] = useState<TaxonomySelection>({ categoryId: null, subcategoryId: null });
 
   const needle = query.trim().toLowerCase();
 
   const platformJobs = useMemo(() => {
     return jobs.filter((job) => {
       if (job.tier === 3) return false;
+      const subcategoryIds = job.subcategoryId
+        ? [job.subcategoryId]
+        : subcategoryIdsForText(`${job.title} ${job.summary} ${job.category}`);
+      if (!matchesTaxonomy(subcategoryIds, taxonomy)) return false;
       if (!needle) return true;
       const haystack = [job.title, job.company, job.summary, job.pay, "platform-executed", skillsFrom(job.summary).join(" ")]
         .join(" ")
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [jobs, needle]);
+  }, [jobs, needle, taxonomy]);
 
   const directory = useMemo(() => {
     return DIRECTORY.filter((platform) => {
       if (filter === "ai" || filter === "freelance" || filter === "surveys") {
         if (platform.category !== filter) return false;
       }
+      const subcategoryIds = subcategoryIdsForPlatform(
+        platform.id,
+        `${platform.name} ${platform.categoryLabel} ${platform.skills.join(" ")}`,
+      );
+      if (!matchesTaxonomy(subcategoryIds, taxonomy)) return false;
       if (!needle) return true;
       const haystack = [platform.name, platform.categoryLabel, platform.location, platform.pay, platform.skills.join(" ")]
         .join(" ")
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [filter, needle]);
+  }, [filter, needle, taxonomy]);
 
   const showPlatform = filter === "all" || filter === "platform";
   const showDirectory = filter !== "platform";
@@ -155,58 +159,11 @@ export function JobsBoard({
     router.replace(queryString ? `/jobs?${queryString}` : "/jobs", { scroll: false });
   }
 
-  function clearError(jobId: string) {
-    setErrors((current) => {
-      const next = { ...current };
-      delete next[jobId];
-      return next;
-    });
-  }
-
-  async function submitJob(job: MarketplaceJob, balance = tokenBalance) {
-    const tokenGated = job.tier === 2;
-    if (tokenGated && balance < TOKEN_COST) {
-      setErrors((current) => ({
-        ...current,
-        [job.id]: "Insufficient tokens. Minimum required: 10 tokens ($2.00).",
-      }));
-      return;
-    }
-
-    setPendingId(job.id);
-    clearError(job.id);
-    try {
-      const result = tokenGated
-        ? await applyToAffiliateJob({ jobId: job.id, tokenCost: TOKEN_COST })
-        : await applyToCuratedJob({ jobId: job.id });
-      if (!result.success) {
-        if (result.error.toLowerCase().includes("sign in")) {
-          setSignedIn(false);
-          setGateJob(job);
-          return;
-        }
-        setErrors((current) => ({ ...current, [job.id]: result.error }));
-        return;
-      }
-      setApplied((current) => new Set(current).add(job.id));
-      setTokenBalance(result.tokenBalance);
-    } catch (caught) {
-      setErrors((current) => ({
-        ...current,
-        [job.id]: caught instanceof Error ? caught.message : "Could not apply.",
-      }));
-    } finally {
-      setPendingId(null);
-    }
-  }
-
-  function requestApply(job: MarketplaceJob) {
-    if (!signedIn) {
-      setGateJob(job);
-      return;
-    }
-    void submitJob(job);
-  }
+  const profile: ApplicantProfile | null = applicant
+    ? { ...applicant, tokenBalance }
+    : signedIn
+      ? { fullName: "", email: "", country: "", tokenBalance }
+      : null;
 
   return (
     <div className="bg-slate-50/50 text-slate-900">
@@ -249,6 +206,8 @@ export function JobsBoard({
           })}
         </div>
 
+        <CategoryNav selection={taxonomy} onChange={setTaxonomy} />
+
         {loadError ? (
           <p className="mt-6 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900" role="alert">
             {loadError}
@@ -272,13 +231,18 @@ export function JobsBoard({
                 </p>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {visiblePlatform.map((job) => (
-                    <PlatformJobCard
+                    <JobMarketplaceCard
                       key={job.id}
                       job={job}
                       applied={applied.has(job.id)}
-                      pending={pendingId === job.id}
-                      error={errors[job.id]}
-                      onApply={() => requestApply(job)}
+                      pending={false}
+                      signedIn={signedIn}
+                      applicant={profile}
+                      onNeedSignIn={() => setGateJob(job)}
+                      onApplied={(jobId, balance) => {
+                        setApplied((current) => new Set(current).add(jobId));
+                        if (typeof balance === "number") setTokenBalance(balance);
+                      }}
                     />
                   ))}
                 </div>
@@ -324,12 +288,10 @@ export function JobsBoard({
         <PlatformSignIn
           onClose={() => setGateJob(null)}
           onSignedIn={async (balance) => {
-            const job = gateJob;
             setSignedIn(true);
             setTokenBalance(balance);
             setGateJob(null);
             router.refresh();
-            await submitJob(job, balance);
           }}
         />
       ) : null}
@@ -338,74 +300,6 @@ export function JobsBoard({
         <PlatformGuideModal platform={guide.platform} startOnSite={guide.site} onClose={() => setGuide(null)} />
       ) : null}
     </div>
-  );
-}
-
-function PlatformJobCard({
-  job,
-  applied,
-  pending,
-  error,
-  onApply,
-}: {
-  job: MarketplaceJob;
-  applied: boolean;
-  pending: boolean;
-  error?: string;
-  onApply: () => void;
-}) {
-  const skills = skillsFrom(job.summary);
-  const externalUrl = externalUrlFor(job);
-  const tokenGated = job.tier === 2;
-
-  return (
-    <article className={cardClass}>
-      <span className="w-fit rounded-full bg-orange-100 px-2.5 py-1 text-xs font-medium text-[#C85A17]">
-        Platform-Executed
-      </span>
-      <h3 className="mt-3 text-lg font-semibold tracking-tight text-slate-900">{job.title}</h3>
-      <p className="mt-1 text-sm text-slate-600">{job.company}</p>
-      <dl className="mt-4 space-y-1.5 text-sm text-slate-700">
-        <div className="flex justify-between gap-3">
-          <dt className="text-slate-500">Location</dt>
-          <dd>Remote / Global</dd>
-        </div>
-        {job.pay ? (
-          <div className="flex justify-between gap-3">
-            <dt className="text-slate-500">{tokenGated ? "Hourly rate" : "Pay"}</dt>
-            <dd>{job.pay}</dd>
-          </div>
-        ) : null}
-      </dl>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{job.summary}</p>
-      {skills.length > 0 ? (
-        <ul className="mt-3 flex flex-wrap gap-1.5">
-          {skills.map((skill) => (
-            <li key={skill} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700">
-              {skill}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {tokenGated ? <p className="mt-3 text-xs leading-5 text-slate-500">{TOKEN_NOTICE}</p> : null}
-      <div className="mt-auto pt-5">
-        {externalUrl && !tokenGated ? (
-          <a href={externalUrl} target="_blank" rel="noreferrer" className={orangeButton}>
-            Apply on Company Site
-            <ExternalLink className="h-4 w-4" aria-hidden />
-          </a>
-        ) : (
-          <button type="button" className={orangeButton} disabled={applied || pending} onClick={onApply}>
-            {applied ? "Applied" : pending ? "Applying…" : tokenGated ? "Apply with 10 Tokens" : "Apply on flexwork-usa"}
-          </button>
-        )}
-      </div>
-      {error ? (
-        <p role="alert" className="mt-3 text-sm text-red-700">
-          {error}
-        </p>
-      ) : null}
-    </article>
   );
 }
 
@@ -537,8 +431,7 @@ function PlatformSignIn({
                 return;
               }
               if (!profile?.is_approved) {
-                await supabase.auth.signOut();
-                setError("Account pending approval or unauthorized.");
+                goTo("/onboarding-pending");
                 return;
               }
               await onSignedIn(profile.token_balance ?? 0);

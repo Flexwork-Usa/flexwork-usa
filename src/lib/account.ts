@@ -15,17 +15,19 @@ export async function getAccountNav(): Promise<AccountNav | null> {
 
   if (!user) return null;
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("full_name, email, role, token_balance")
-    .eq("id", user.id)
-    .maybeSingle()
-    .returns<{
-      full_name: string | null;
-      email: string | null;
-      role: string | null;
-      token_balance: number | null;
-    }>();
+  const [{ data, error }, { data: adminUser }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("full_name, email, token_balance")
+      .eq("id", user.id)
+      .maybeSingle()
+      .returns<{
+        full_name: string | null;
+        email: string | null;
+        token_balance: number | null;
+      }>(),
+    supabase.from("admin_users").select("id").eq("id", user.id).maybeSingle(),
+  ]);
 
   if (error) {
     throw new Error(error.message);
@@ -34,7 +36,7 @@ export async function getAccountNav(): Promise<AccountNav | null> {
   return {
     fullName: data?.full_name || "Account",
     email: data?.email || user.email || "",
-    role: data?.role === "admin" ? "admin" : "worker",
+    role: adminUser ? "admin" : "worker",
     tokenBalance: data?.token_balance ?? 0,
   };
 }

@@ -7,6 +7,7 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { pageFrame } from "@/lib/frame";
 import { SignOutButton } from "@/components/SignOutButton";
 import type { AccountNav } from "@/lib/account";
+import { hidesSiteChrome } from "@/lib/app-shell";
 import { PLATFORM_LINKS } from "@/lib/site";
 
 const accentButton =
@@ -86,6 +87,7 @@ export function HeaderBar({ account }: { account: AccountNav | null }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const onDashboard = hidesSiteChrome(pathname);
   const overHero = pathname === "/" && !scrolled && !open;
 
   useEffect(() => {
@@ -94,6 +96,8 @@ export function HeaderBar({ account }: { account: AccountNav | null }) {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  if (onDashboard) return null;
 
   return (
     <header

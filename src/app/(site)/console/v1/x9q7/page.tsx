@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { OperationsDesk } from "@/components/admin/OperationsDesk";
 import { getAdminDashboardData } from "@/lib/admin/dashboard-data";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { verifyAdmin } from "@/lib/supabase/admin";
 
 export const metadata = {
   title: "flexwork-usa",
@@ -26,28 +26,27 @@ export default function ConsolePage() {
 async function ConsoleContent() {
   await connection();
 
-  const session = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await session.auth.getUser();
-
-  if (!user) redirect("/");
-
-  const { data: profile, error: profileError } = await session
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (profileError || profile?.role !== "admin") redirect("/");
+  let adminEmail = "";
+  try {
+    const { user, adminUser } = await verifyAdmin();
+    const storedEmail = typeof adminUser.email === "string" ? adminUser.email : "";
+    adminEmail = storedEmail || user.email || "";
+  } catch {
+    redirect("/");
+  }
 
   try {
     const data = await getAdminDashboardData();
     return (
-      <OperationsDesk applications={data.applications} profiles={data.profiles} deposits={data.deposits} />
+      <OperationsDesk
+        applications={data.applications}
+        profiles={data.profiles}
+        deposits={data.deposits}
+        adminEmail={adminEmail}
+      />
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not load records.";
-    return <OperationsDesk applications={[]} profiles={[]} deposits={[]} loadError={message} />;
+    return <OperationsDesk applications={[]} profiles={[]} deposits={[]} loadError={message} adminEmail={adminEmail} />;
   }
 }

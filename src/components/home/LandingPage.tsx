@@ -128,10 +128,10 @@ function Hero() {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a href="/onboard" className={heroButton}>
-                Get Started & Apply
+                Get Started
               </a>
               <a href="/jobs" className={heroOutline}>
-                Explore Opportunities
+                Explore Jobs
               </a>
             </div>
             <ul className="mt-10 grid gap-3 sm:grid-cols-3">
@@ -208,13 +208,13 @@ export function LandingPage() {
           <div className="rounded-2xl bg-[#C85A17] px-6 py-10 text-white sm:px-10">
             <h2 className="text-2xl font-semibold tracking-tight">Ready to Start Working Remotely?</h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-white/90">
-              Submit your details. An administrator reviews every application before an account is created.
+              Create your account and start applying to featured remote tasks.
             </p>
             <a
               href="/onboard"
               className="mt-6 inline-flex items-center justify-center rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-[#C85A17] transition-colors hover:bg-slate-50"
             >
-              Submit Onboarding Application
+              Get Started
             </a>
           </div>
         </Reveal>

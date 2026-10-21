@@ -3,6 +3,7 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, X } from "lucide-react";
+import { TokenLogo } from "@/components/dashboard/CryptoNetworkIcons";
 import { submitDepositHash } from "@/actions/deposit-actions";
 import {
   CUSTOM_PLAN_MINIMUM_USD,
@@ -93,12 +94,15 @@ function CopyButton({ value, label = "Copy" }: { value: string; label?: string }
   );
 }
 
-function AddressRow({ label, value }: { label: string; value: string | null }) {
+function AddressRow({ label, value }: { label: WalletType; value: string | null }) {
   const address = value?.trim() ?? "";
 
   return (
     <div className="rounded-xl border border-gray-200 px-4 py-4">
-      <p className="text-xs font-medium tracking-wide text-gray-500 uppercase">{label}</p>
+      <div className="flex items-center gap-2">
+        <TokenLogo asset={label} className="h-6 w-6" />
+        <p className="text-xs font-medium tracking-wide text-gray-500 uppercase">{label}</p>
+      </div>
       {address ? (
         <div className="mt-2 flex items-start justify-between gap-3">
           <p className="break-all text-sm text-gray-900">{address}</p>
@@ -457,9 +461,12 @@ export function WorkerHome({
                         disabled={!address}
                         onChange={() => setWalletType(type)}
                       />
-                      <span>
-                        {type}
-                        {address ? null : <span className="mt-0.5 block text-xs text-gray-500">Pending Assignment</span>}
+                      <span className="flex items-start gap-2">
+                        <TokenLogo asset={type} className="mt-0.5 h-5 w-5" />
+                        <span>
+                          {type}
+                          {address ? null : <span className="mt-0.5 block text-xs text-gray-500">Pending Assignment</span>}
+                        </span>
                       </span>
                     </label>
                   );
