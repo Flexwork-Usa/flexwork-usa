@@ -5,7 +5,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { AdminAccount, AdminRole, WorkerAdminAccount, WorkerStatus } from "@/lib/platform/types";
 
 function asStatus(value: unknown): WorkerStatus {
-  if (value === "banned" || value === "temp_disabled" || value === "under_review" || value === "active") {
+  if (
+    value === "banned" ||
+    value === "temp_disabled" ||
+    value === "suspended" ||
+    value === "under_review" ||
+    value === "active"
+  ) {
     return value;
   }
   return "active";

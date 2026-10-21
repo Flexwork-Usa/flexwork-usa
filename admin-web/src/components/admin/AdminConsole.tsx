@@ -48,7 +48,16 @@ const STATUS_LABEL: Record<WorkerStatus, string> = {
   active: "Active",
   under_review: "Under Review",
   temp_disabled: "Disabled",
+  suspended: "Suspended",
   banned: "Banned",
+};
+
+const STATUS_BADGE: Record<WorkerStatus, string> = {
+  active: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  under_review: "bg-orange-500/10 text-[#C85A17] border-orange-500/20",
+  temp_disabled: "bg-slate-500/10 text-slate-600 border-slate-500/20",
+  suspended: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+  banned: "bg-red-500/10 text-red-600 border-red-500/20",
 };
 
 export function AdminConsole({
@@ -553,7 +562,7 @@ function DepositAuditor({ deposits }: { deposits: TreasuryDeposit[] }) {
 
 function WorkersManager({ workers }: { workers: ManagedWorker[] }) {
   const router = useRouter();
-  const statuses: WorkerStatus[] = ["active", "under_review", "temp_disabled", "banned"];
+  const statuses: WorkerStatus[] = ["active", "under_review", "temp_disabled", "suspended", "banned"];
   const [confirm, setConfirm] = useState<{ id: string; status: WorkerStatus } | null>(null);
   const [resetId, setResetId] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
@@ -615,7 +624,11 @@ function WorkersManager({ workers }: { workers: ManagedWorker[] }) {
                       </button>
                     </div>
                   </td>
-                  <td className="px-4 py-3">{STATUS_LABEL[worker.status]}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${STATUS_BADGE[worker.status]}`}>
+                      {STATUS_LABEL[worker.status]}
+                    </span>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
                       {statuses.map((status) => (

@@ -19,6 +19,7 @@ import { fieldClass, formatWhen, primaryButtonClass, secondaryButtonClass } from
 const STATUS_OPTIONS: Array<{ value: WorkerStatus; label: string }> = [
   { value: "active", label: "Active" },
   { value: "temp_disabled", label: "Disabled" },
+  { value: "suspended", label: "Suspended" },
   { value: "banned", label: "Banned" },
   { value: "under_review", label: "Under review" },
 ];

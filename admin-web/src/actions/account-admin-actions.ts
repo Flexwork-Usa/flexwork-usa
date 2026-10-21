@@ -196,7 +196,7 @@ export async function updateWorkerAdminStatus(workerId: string, status: WorkerSt
   if (!canManageRole(actorRole, "worker_admin")) {
     throw new Error("You cannot update Worker Admin status.");
   }
-  if (!["active", "banned", "temp_disabled", "under_review"].includes(status)) {
+  if (!["active", "banned", "temp_disabled", "suspended", "under_review"].includes(status)) {
     throw new Error("Invalid status.");
   }
 
@@ -399,7 +399,7 @@ export async function updateTierAdminRole(adminId: string, role: Extract<AdminRo
 
 export async function updateTierAdminStatus(adminId: string, status: WorkerStatus) {
   const { supabase } = await requireSuperAdmin();
-  if (!["active", "banned", "temp_disabled", "under_review"].includes(status)) {
+  if (!["active", "banned", "temp_disabled", "suspended", "under_review"].includes(status)) {
     throw new Error("Invalid status.");
   }
 
